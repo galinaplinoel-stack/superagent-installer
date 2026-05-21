@@ -56,21 +56,45 @@ echo ""
 # ============================================
 # Install Dependencies
 # ============================================
-echo -e "${YELLOW}[2/6] Installing dependencies...${NC}"
+echo -e "${YELLOW}[2/6] Checking dependencies...${NC}"
 
 # Update package list
 apt-get update -qq
 
-# Install essential packages
-apt-get install -y -qq curl wget git nodejs npm > /dev/null 2>&1
+# Check and install essential packages
+PACKAGES_TO_INSTALL=""
+
+for pkg in curl wget git; do
+    if ! command -v $pkg &> /dev/null; then
+        PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL $pkg"
+    else
+        echo -e "${GREEN}✓ $pkg already installed${NC}"
+    fi
+done
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
-    echo -e "${RED}Error: Node.js installation failed${NC}"
-    exit 1
+    PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL nodejs"
+else
+    echo -e "${GREEN}✓ Node.js already installed ($(node --version))${NC}"
 fi
 
-echo -e "${GREEN}✓ Dependencies installed${NC}"
+# Check npm
+if ! command -v npm &> /dev/null; then
+    PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL npm"
+else
+    echo -e "${GREEN}✓ npm already installed ($(npm --version))${NC}"
+fi
+
+# Install missing packages
+if [ -n "$PACKAGES_TO_INSTALL" ]; then
+    echo -e "${YELLOW}Installing:$PACKAGES_TO_INSTALL${NC}"
+    apt-get install -y $PACKAGES_TO_INSTALL || {
+        echo -e "${YELLOW}Warning: Some packages failed to install, but continuing...${NC}"
+    }
+fi
+
+echo -e "${GREEN}✓ Dependencies ready${NC}"
 echo ""
 
 # ============================================
@@ -78,43 +102,49 @@ echo ""
 # ============================================
 echo -e "${YELLOW}[3/6] Installing 9Router (AI Gateway)...${NC}"
 
-# Install 9Router globally
-npm install -g 9router > /dev/null 2>&1
-
-if ! command -v 9router &> /dev/null; then
-    echo -e "${RED}Error: 9Router installation failed${NC}"
-    exit 1
+# Check if 9Router is already installed
+if command -v 9router &> /dev/null; then
+    echo -e "${GREEN}✓ 9Router already installed${NC}"
+else
+    # Install 9Router globally
+    npm install -g 9router || {
+        echo -e "${RED}Error: 9Router installation failed${NC}"
+        exit 1
+    }
+    echo -e "${GREEN}✓ 9Router installed${NC}"
 fi
-
-echo -e "${GREEN}✓ 9Router installed${NC}"
 echo ""
 
 # ============================================
 # Install OpenClaw/Hermes
 # ============================================
-echo -e "${YELLOW}[4/6] Installing OpenClaw/Hermes...${NC}"
+echo -e "${YELLOW}[4/6] Checking agent framework...${NC}"
 
 # Create installation directory
 INSTALL_DIR="$HOME/.superagent"
 mkdir -p "$INSTALL_DIR"
 
-# Clone OpenClaw (or use Hermes if available)
+# Check for existing agent frameworks
 if command -v openclaw &> /dev/null; then
-    echo -e "${GREEN}✓ OpenClaw already installed${NC}"
+    echo -e "${GREEN}✓ OpenClaw found${NC}"
+    AGENT_TYPE="openclaw"
 elif command -v hermes &> /dev/null; then
-    echo -e "${GREEN}✓ Hermes already installed${NC}"
+    echo -e "${GREEN}✓ Hermes found${NC}"
+    AGENT_TYPE="hermes"
 else
-    # Install OpenClaw via npm
-    npm install -g openclaw > /dev/null 2>&1 || {
+    echo -e "${YELLOW}Note: No agent framework found. Installing OpenClaw...${NC}"
+    npm install -g openclaw 2>/dev/null || {
         echo -e "${YELLOW}Note: OpenClaw not available via npm, using manual setup${NC}"
-        # Clone from GitHub
-        git clone https://github.com/openclaw/openclaw.git "$INSTALL_DIR/openclaw" > /dev/null 2>&1 || {
-            echo -e "${YELLOW}Note: Using alternative installation method${NC}"
-        }
+        AGENT_TYPE="manual"
     }
+    if command -v openclaw &> /dev/null; then
+        AGENT_TYPE="openclaw"
+    else
+        AGENT_TYPE="manual"
+    fi
 fi
 
-echo -e "${GREEN}✓ Agent framework ready${NC}"
+echo -e "${GREEN}✓ Agent framework ready ($AGENT_TYPE)${NC}"
 echo ""
 
 # ============================================
@@ -129,11 +159,18 @@ mkdir -p "$BRAIN_DIR/skills"
 mkdir -p "$BRAIN_DIR/memory"
 
 # Copy SOUL.md
-cp brain/SOUL.md "$BRAIN_DIR/SOUL.md"
+if [ -f "brain/SOUL.md" ]; then
+    cp brain/SOUL.md "$BRAIN_DIR/SOUL.md"
+    echo -e "${GREEN}✓ SOUL.md copied${NC}"
+else
+    echo -e "${RED}Error: brain/SOUL.md not found${NC}"
+    exit 1
+fi
 
 # Copy skill files (if they exist)
 if [ -d "skills" ]; then
     cp -r skills/* "$BRAIN_DIR/skills/" 2>/dev/null || true
+    echo -e "${GREEN}✓ Skills copied${NC}"
 fi
 
 # Create AGENTS.md
@@ -188,6 +225,7 @@ Write to memory when: decision made, preference revealed, project context establ
 [NEXT STEP] → immediate action
 [🔧 UPGRADE] → one line improvement (when meaningful)
 EOF
+echo -e "${GREEN}✓ AGENTS.md created${NC}"
 
 # Create USER.md template
 cat > "$BRAIN_DIR/USER.md" << 'EOF'
@@ -211,6 +249,7 @@ cat > "$BRAIN_DIR/USER.md" << 'EOF'
 ## Goals
 - [Your goals here]
 EOF
+echo -e "${GREEN}✓ USER.md created${NC}"
 
 # Create MEMORY.md
 cat > "$BRAIN_DIR/MEMORY.md" << 'EOF'
@@ -228,6 +267,7 @@ cat > "$BRAIN_DIR/MEMORY.md" << 'EOF'
 ## Lessons Learned
 - [Important lessons will be logged here]
 EOF
+echo -e "${GREEN}✓ MEMORY.md created${NC}"
 
 # Create TOOLS.md
 cat > "$BRAIN_DIR/TOOLS.md" << 'EOF'
@@ -246,6 +286,7 @@ cat > "$BRAIN_DIR/TOOLS.md" << 'EOF'
 ## Deployment
 - Vercel, Docker, VPS
 EOF
+echo -e "${GREEN}✓ TOOLS.md created${NC}"
 
 echo -e "${GREEN}✓ SUPERAGENT brain configured${NC}"
 echo ""
@@ -280,13 +321,12 @@ MODEL=$MODEL_NAME
 NINE_ROUTER_PORT=20128
 NINE_ROUTER_URL=http://localhost:20128/v1
 EOF
+echo -e "${GREEN}✓ Configuration saved${NC}"
 
 # Update TOOLS.md with actual config
 sed -i "s|http://localhost:20128/v1|$BASE_URL|g" "$BRAIN_DIR/TOOLS.md"
 sed -i "s|\[configured during setup\]|$MODEL_NAME|g" "$BRAIN_DIR/TOOLS.md"
 
-echo ""
-echo -e "${GREEN}✓ Configuration saved${NC}"
 echo ""
 
 # ============================================
@@ -295,8 +335,15 @@ echo ""
 cat > "$INSTALL_DIR/start.sh" << 'STARTUP'
 #!/bin/bash
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/config.env"
+
+echo "Starting SUPERAGENT..."
+echo ""
+
 # Start 9Router in background
-echo "Starting 9Router..."
+echo "Starting 9Router on port $NINE_ROUTER_PORT..."
 9router &
 NINE_ROUTER_PID=$!
 
@@ -304,23 +351,21 @@ NINE_ROUTER_PID=$!
 sleep 3
 
 # Check if 9Router is running
-if ! curl -s http://localhost:20128/health > /dev/null 2>&1; then
-    echo "Warning: 9Router may not be fully started yet"
+if curl -s http://localhost:$NINE_ROUTER_PORT/health > /dev/null 2>&1; then
+    echo "✓ 9Router started (PID: $NINE_ROUTER_PID)"
+else
+    echo "⚠ 9Router may not be fully started yet"
 fi
 
-echo "9Router started (PID: $NINE_ROUTER_PID)"
-echo "Dashboard: http://localhost:20128"
+echo "Dashboard: http://localhost:$NINE_ROUTER_PORT"
 echo ""
-
-# Load configuration
-source ~/.superagent/config.env
 
 # Export environment variables
 export API_KEY
 export BASE_URL
 export MODEL
 
-echo "Configuration loaded:"
+echo "Configuration:"
 echo "  API Key: ${API_KEY:0:10}..."
 echo "  Base URL: $BASE_URL"
 echo "  Model: $MODEL"
@@ -339,10 +384,11 @@ fi
 
 echo ""
 echo "SUPERAGENT is ready! 🔥"
-echo "Access 9Router dashboard: http://localhost:20128"
+echo "Access 9Router dashboard: http://localhost:$NINE_ROUTER_PORT"
 STARTUP
 
 chmod +x "$INSTALL_DIR/start.sh"
+echo -e "${GREEN}✓ Start script created${NC}"
 
 # Create stop script
 cat > "$INSTALL_DIR/stop.sh" << 'STOP'
@@ -360,11 +406,13 @@ elif command -v hermes &> /dev/null; then
     hermes gateway stop 2>/dev/null || true
 fi
 
-echo "SUPERAGENT stopped."
+echo "✓ SUPERAGENT stopped."
 STOP
 
 chmod +x "$INSTALL_DIR/stop.sh"
+echo -e "${GREEN}✓ Stop script created${NC}"
 
+echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${GREEN}  Installation Complete! 🔥${NC}"
 echo -e "${BLUE}========================================${NC}"
