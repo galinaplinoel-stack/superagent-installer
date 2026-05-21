@@ -2,7 +2,7 @@
 
 # ============================================
 # SUPERAGENT Installer
-# One-click setup for AI Agent + 9Router
+# One-click setup for AI Agent + OpenClaw
 # ============================================
 
 set -e
@@ -24,7 +24,7 @@ cat << "EOF"
   ___) | |_| |  __/| |___  / ___ \|  __/| || |\  | |_| |
  |____/ \___/|_|   |_____|_/   \_\_|  |___|_| \_|\____|
 
-  Elite AI Agent Installer v1.0
+  Elite AI Agent Installer v2.0
 EOF
 echo -e "${NC}"
 
@@ -36,7 +36,7 @@ echo ""
 # ============================================
 # System Check
 # ============================================
-echo -e "${YELLOW}[1/7] Checking system...${NC}"
+echo -e "${YELLOW}[1/5] Checking system...${NC}"
 
 # Check OS
 if [[ "$OSTYPE" != "linux-gnu"* ]]; then
@@ -56,7 +56,7 @@ echo ""
 # ============================================
 # Install Dependencies
 # ============================================
-echo -e "${YELLOW}[2/7] Checking dependencies...${NC}"
+echo -e "${YELLOW}[2/5] Checking dependencies...${NC}"
 
 # Update package list
 apt-get update -qq
@@ -98,27 +98,9 @@ echo -e "${GREEN}✓ Dependencies ready${NC}"
 echo ""
 
 # ============================================
-# Install 9Router
-# ============================================
-echo -e "${YELLOW}[3/7] Installing 9Router (AI Gateway)...${NC}"
-
-# Check if 9Router is already installed
-if command -v 9router &> /dev/null; then
-    echo -e "${GREEN}✓ 9Router already installed${NC}"
-else
-    # Install 9Router globally
-    npm install -g 9router || {
-        echo -e "${RED}Error: 9Router installation failed${NC}"
-        exit 1
-    }
-    echo -e "${GREEN}✓ 9Router installed${NC}"
-fi
-echo ""
-
-# ============================================
 # Install OpenClaw
 # ============================================
-echo -e "${YELLOW}[4/7] Installing OpenClaw...${NC}"
+echo -e "${YELLOW}[3/5] Installing OpenClaw...${NC}"
 
 # Create installation directory
 INSTALL_DIR="$HOME/.superagent"
@@ -126,7 +108,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Check if OpenClaw is already installed
 if command -v openclaw &> /dev/null; then
-    echo -e "${GREEN}✓ OpenClaw already installed${NC}"
+    echo -e "${GREEN}✓ OpenClaw already installed ($(openclaw --version 2>/dev/null || echo 'version unknown'))${NC}"
     AGENT_TYPE="openclaw"
 else
     echo -e "${YELLOW}Installing OpenClaw...${NC}"
@@ -156,7 +138,7 @@ echo ""
 # ============================================
 # Setup SUPERAGENT Brain
 # ============================================
-echo -e "${YELLOW}[5/7] Setting up SUPERAGENT brain...${NC}"
+echo -e "${YELLOW}[4/5] Setting up SUPERAGENT brain...${NC}"
 
 # Copy brain files
 BRAIN_DIR="$INSTALL_DIR/brain"
@@ -261,9 +243,10 @@ cat > "$BRAIN_DIR/TOOLS.md" << 'EOF'
 - Web (browser, HTTP, scraping)
 - GitHub (repos, PR, issues)
 
-## API Gateway
-- 9Router: http://localhost:20128/v1
+## AI Provider
+- Provider: [configured during setup]
 - Model: [configured during setup]
+- Base URL: [configured during setup]
 
 ## Messaging
 - Telegram Bot: [configured if provided]
@@ -280,7 +263,7 @@ echo ""
 # ============================================
 # Configure API & Model
 # ============================================
-echo -e "${YELLOW}[6/7] Configuring API & Model...${NC}"
+echo -e "${YELLOW}[5/5] Configuring API & Model...${NC}"
 echo ""
 
 # Get API Key
@@ -288,12 +271,12 @@ echo -e "${CYAN}Enter your API Key:${NC}"
 read -r API_KEY
 
 # Get Base URL
-echo -e "${CYAN}Enter Base URL (default: http://localhost:20128/v1):${NC}"
+echo -e "${CYAN}Enter Base URL (e.g., https://api.openai.com/v1, https://openrouter.ai/api/v1):${NC}"
 read -r BASE_URL
-BASE_URL=${BASE_URL:-"http://localhost:20128/v1"}
+BASE_URL=${BASE_URL:-"https://api.openai.com/v1"}
 
 # Get Model
-echo -e "${CYAN}Enter Model name (e.g., claude-sonnet-4, gpt-4o, deepseek-chat):${NC}"
+echo -e "${CYAN}Enter Model name (e.g., gpt-4o, claude-sonnet-4, deepseek-chat):${NC}"
 read -r MODEL_NAME
 
 # Get Telegram Bot Token (optional)
@@ -307,7 +290,7 @@ if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
     read -r TELEGRAM_CHAT_ID
 fi
 
-# Create config file
+# Create config file for SUPERAGENT
 cat > "$INSTALL_DIR/config.env" << EOF
 # SUPERAGENT Configuration
 API_KEY=$API_KEY
@@ -317,16 +300,31 @@ MODEL=$MODEL_NAME
 # Telegram Bot (optional)
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
-
-# 9Router Settings
-NINE_ROUTER_PORT=20128
-NINE_ROUTER_URL=http://localhost:20128/v1
 EOF
 echo -e "${GREEN}✓ Configuration saved${NC}"
 
+# ============================================
+# Configure OpenClaw directly
+# ============================================
+echo -e "${YELLOW}Configuring OpenClaw with your API settings...${NC}"
+
+# Set OpenClaw provider config
+openclaw config set models.providers.custom.baseUrl "$BASE_URL" 2>/dev/null || true
+openclaw config set models.providers.custom.apiKey "$API_KEY" 2>/dev/null || true
+
+# Set default model
+openclaw config set models.defaults.model "$MODEL_NAME" 2>/dev/null || true
+
+echo -e "${GREEN}✓ OpenClaw configured${NC}"
+
 # Update TOOLS.md with actual config
-sed -i "s|http://localhost:20128/v1|$BASE_URL|g" "$BRAIN_DIR/TOOLS.md"
 sed -i "s|\[configured during setup\]|$MODEL_NAME|g" "$BRAIN_DIR/TOOLS.md"
+sed -i "s|\[configured if provided\]|✓ Configured|g" "$BRAIN_DIR/TOOLS.md" 2>/dev/null || true
+
+# Update provider info in TOOLS.md
+PROVIDER_NAME=$(echo "$BASE_URL" | sed -E 's|https?://([^/]+).*|\1|')
+sed -i "s|Provider: \[configured during setup\]|Provider: Custom ($PROVIDER_NAME)|g" "$BRAIN_DIR/TOOLS.md"
+sed -i "s|Base URL: \[configured during setup\]|Base URL: $BASE_URL|g" "$BRAIN_DIR/TOOLS.md"
 
 # Update Telegram config in TOOLS.md
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
@@ -340,7 +338,7 @@ echo ""
 # ============================================
 # Setup User Profile
 # ============================================
-echo -e "${YELLOW}[7/7] Setting up your profile...${NC}"
+echo -e "${YELLOW}Setting up your profile...${NC}"
 echo ""
 
 # Get user info
@@ -427,28 +425,9 @@ source "$SCRIPT_DIR/config.env"
 echo "Starting SUPERAGENT..."
 echo ""
 
-# Start 9Router in background
-echo "Starting 9Router on port $NINE_ROUTER_PORT..."
-9router &
-NINE_ROUTER_PID=$!
-
-# Wait for 9Router to be ready
-sleep 3
-
-# Check if 9Router is running
-if curl -s http://localhost:$NINE_ROUTER_PORT/health > /dev/null 2>&1; then
-    echo "✓ 9Router started (PID: $NINE_ROUTER_PID)"
-else
-    echo "⚠ 9Router may not be fully started yet"
-fi
-
-echo "Dashboard: http://localhost:$NINE_ROUTER_PORT"
-echo ""
-
-# Export environment variables
-export API_KEY
-export BASE_URL
-export MODEL
+# Export environment variables for OpenClaw
+export OPENAI_API_KEY="$API_KEY"
+export OPENAI_BASE_URL="$BASE_URL"
 
 echo "Configuration:"
 echo "  API Key: ${API_KEY:0:10}..."
@@ -456,10 +435,10 @@ echo "  Base URL: $BASE_URL"
 echo "  Model: $MODEL"
 echo ""
 
-# Start agent
+# Start OpenClaw
 if command -v openclaw &> /dev/null; then
-    echo "Starting OpenClaw..."
-    openclaw start
+    echo "Starting OpenClaw gateway..."
+    openclaw gateway start
 else
     echo "Error: OpenClaw not found!"
     exit 1
@@ -467,7 +446,6 @@ fi
 
 echo ""
 echo "SUPERAGENT is ready! 🔥"
-echo "Access 9Router dashboard: http://localhost:$NINE_ROUTER_PORT"
 STARTUP
 
 chmod +x "$INSTALL_DIR/start.sh"
@@ -479,12 +457,9 @@ cat > "$INSTALL_DIR/stop.sh" << 'STOP'
 
 echo "Stopping SUPERAGENT..."
 
-# Stop 9Router
-pkill -f "9router" 2>/dev/null || true
-
-# Stop agent
+# Stop OpenClaw
 if command -v openclaw &> /dev/null; then
-    openclaw stop 2>/dev/null || true
+    openclaw gateway stop 2>/dev/null || true
 else
     echo "Warning: OpenClaw not found"
 fi
@@ -526,11 +501,11 @@ echo ""
 echo -e "${CYAN}Configuration:${NC}"
 echo -e "  API Key: ${API_KEY:0:10}..."
 echo -e "  Base URL: $BASE_URL"
-echo -e "  Model: $MODEL"
+echo -e "  Model: $MODEL_NAME"
 echo ""
 echo -e "${CYAN}Services:${NC}"
-echo -e "  9Router: http://localhost:20128"
 echo -e "  Agent: $AGENT_TYPE"
+echo -e "  Gateway: OpenClaw"
 echo ""
 echo -e "${CYAN}Quick Commands:${NC}"
 echo -e "  ${GREEN}~/.superagent/start.sh${NC}    # Start services"
@@ -538,9 +513,9 @@ echo -e "  ${GREEN}~/.superagent/stop.sh${NC}     # Stop services"
 echo -e "  ${GREEN}nano ~/.superagent/brain/USER.md${NC}  # Edit profile"
 echo ""
 echo -e "${YELLOW}What's Next:${NC}"
-echo -e "  1. Open ${GREEN}http://localhost:20128${NC} for 9Router dashboard"
-echo -e "  2. Connect your preferred AI provider in dashboard"
-echo -e "  3. Start chatting with your AI agent!"
+echo -e "  1. Start chatting with your AI agent!"
+echo -e "  2. Edit ${GREEN}~/.superagent/brain/USER.md${NC} to update your profile"
+echo -e "  3. Add skills to ${GREEN}~/.superagent/brain/skills/${NC}"
 echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${CYAN}  SUPERAGENT — Built for execution. 🔥${NC}"
