@@ -36,7 +36,7 @@ echo ""
 # ============================================
 # System Check
 # ============================================
-echo -e "${YELLOW}[1/6] Checking system...${NC}"
+echo -e "${YELLOW}[1/7] Checking system...${NC}"
 
 # Check OS
 if [[ "$OSTYPE" != "linux-gnu"* ]]; then
@@ -56,7 +56,7 @@ echo ""
 # ============================================
 # Install Dependencies
 # ============================================
-echo -e "${YELLOW}[2/6] Checking dependencies...${NC}"
+echo -e "${YELLOW}[2/7] Checking dependencies...${NC}"
 
 # Update package list
 apt-get update -qq
@@ -100,7 +100,7 @@ echo ""
 # ============================================
 # Install 9Router
 # ============================================
-echo -e "${YELLOW}[3/6] Installing 9Router (AI Gateway)...${NC}"
+echo -e "${YELLOW}[3/7] Installing 9Router (AI Gateway)...${NC}"
 
 # Check if 9Router is already installed
 if command -v 9router &> /dev/null; then
@@ -118,7 +118,7 @@ echo ""
 # ============================================
 # Install OpenClaw/Hermes
 # ============================================
-echo -e "${YELLOW}[4/6] Checking agent framework...${NC}"
+echo -e "${YELLOW}[4/7] Checking agent framework...${NC}"
 
 # Create installation directory
 INSTALL_DIR="$HOME/.superagent"
@@ -150,7 +150,7 @@ echo ""
 # ============================================
 # Setup SUPERAGENT Brain
 # ============================================
-echo -e "${YELLOW}[5/6] Setting up SUPERAGENT brain...${NC}"
+echo -e "${YELLOW}[5/7] Setting up SUPERAGENT brain...${NC}"
 
 # Copy brain files
 BRAIN_DIR="$INSTALL_DIR/brain"
@@ -227,30 +227,6 @@ Write to memory when: decision made, preference revealed, project context establ
 EOF
 echo -e "${GREEN}✓ AGENTS.md created${NC}"
 
-# Create USER.md template
-cat > "$BRAIN_DIR/USER.md" << 'EOF'
-# USER.md — Owner Profile
-
-**Name**: [Your Name]
-**Username**: [Your Username]
-**Language**: Bahasa Indonesia (casual)
-**Preferences**: [Your preferences here]
-
----
-
-## Communication Style
-- Direct and to the point
-- No unnecessary formalities
-- Technical terms in English
-
-## Projects
-- [List your projects here]
-
-## Goals
-- [Your goals here]
-EOF
-echo -e "${GREEN}✓ USER.md created${NC}"
-
 # Create MEMORY.md
 cat > "$BRAIN_DIR/MEMORY.md" << 'EOF'
 # MEMORY.md — Long-term Context
@@ -294,7 +270,7 @@ echo ""
 # ============================================
 # Configure API & Model
 # ============================================
-echo -e "${YELLOW}[6/6] Configuring API & Model...${NC}"
+echo -e "${YELLOW}[6/7] Configuring API & Model...${NC}"
 echo ""
 
 # Get API Key
@@ -326,6 +302,66 @@ echo -e "${GREEN}✓ Configuration saved${NC}"
 # Update TOOLS.md with actual config
 sed -i "s|http://localhost:20128/v1|$BASE_URL|g" "$BRAIN_DIR/TOOLS.md"
 sed -i "s|\[configured during setup\]|$MODEL_NAME|g" "$BRAIN_DIR/TOOLS.md"
+
+echo ""
+
+# ============================================
+# Setup User Profile
+# ============================================
+echo -e "${YELLOW}[7/7] Setting up your profile...${NC}"
+echo ""
+
+# Get user info
+echo -e "${CYAN}Enter your name:${NC}"
+read -r USER_NAME
+
+echo -e "${CYAN}Enter your username (for social media, etc):${NC}"
+read -r USER_USERNAME
+
+echo -e "${CYAN}Enter your preferred language (default: Bahasa Indonesia):${NC}"
+read -r USER_LANG
+USER_LANG=${USER_LANG:-"Bahasa Indonesia"}
+
+echo -e "${CYAN}Enter your communication style (e.g., direct, casual, formal):${NC}"
+read -r USER_STYLE
+USER_STYLE=${USER_STYLE:-"direct and casual"}
+
+echo -e "${CYAN}Enter your main projects (comma separated, or press enter to skip):${NC}"
+read -r USER_PROJECTS
+
+echo -e "${CYAN}Enter your main goals (comma separated, or press enter to skip):${NC}"
+read -r USER_GOALS
+
+# Create USER.md
+cat > "$BRAIN_DIR/USER.md" << EOF
+# USER.md — Owner Profile
+
+**Name**: $USER_NAME
+**Username**: $USER_USERNAME
+**Language**: $USER_LANG
+**Style**: $USER_STYLE
+
+---
+
+## Communication Style
+- $USER_STYLE
+- Technical terms in English
+
+## Projects
+$(if [ -n "$USER_PROJECTS" ]; then
+    echo "$USER_PROJECTS" | tr ',' '\n' | sed 's/^/- /'
+else
+    echo "- [Add your projects here]"
+fi)
+
+## Goals
+$(if [ -n "$USER_GOALS" ]; then
+    echo "$USER_GOALS" | tr ',' '\n' | sed 's/^/- /'
+else
+    echo "- [Add your goals here]"
+fi)
+EOF
+echo -e "${GREEN}✓ Profile created${NC}"
 
 echo ""
 
@@ -413,25 +449,51 @@ chmod +x "$INSTALL_DIR/stop.sh"
 echo -e "${GREEN}✓ Stop script created${NC}"
 
 echo ""
+
+# ============================================
+# Auto-Start Services
+# ============================================
+echo -e "${YELLOW}Starting services...${NC}"
+echo ""
+
+# Run start script
+"$INSTALL_DIR/start.sh"
+
+echo ""
+
+# ============================================
+# Final Summary
+# ============================================
 echo -e "${BLUE}========================================${NC}"
 echo -e "${GREEN}  Installation Complete! 🔥${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 echo -e "${CYAN}Installation Directory:${NC} $INSTALL_DIR"
 echo ""
-echo -e "${CYAN}Quick Start:${NC}"
-echo -e "  ${GREEN}~/.superagent/start.sh${NC}    # Start 9Router + Agent"
-echo -e "  ${GREEN}~/.superagent/stop.sh${NC}     # Stop all services"
+echo -e "${CYAN}Your Profile:${NC}"
+echo -e "  Name: $USER_NAME"
+echo -e "  Username: $USER_USERNAME"
+echo -e "  Language: $USER_LANG"
+echo -e "  Style: $USER_STYLE"
 echo ""
-echo -e "${CYAN}9Router Dashboard:${NC} http://localhost:20128"
+echo -e "${CYAN}Configuration:${NC}"
+echo -e "  API Key: ${API_KEY:0:10}..."
+echo -e "  Base URL: $BASE_URL"
+echo -e "  Model: $MODEL"
 echo ""
-echo -e "${CYAN}Configuration:${NC} $INSTALL_DIR/config.env"
+echo -e "${CYAN}Services:${NC}"
+echo -e "  9Router: http://localhost:20128"
+echo -e "  Agent: $AGENT_TYPE"
 echo ""
-echo -e "${YELLOW}Next Steps:${NC}"
-echo -e "  1. Run ${GREEN}~/.superagent/start.sh${NC} to start"
-echo -e "  2. Open ${GREEN}http://localhost:20128${NC} for 9Router dashboard"
-echo -e "  3. Edit ${GREEN}$BRAIN_DIR/USER.md${NC} with your profile"
-echo -e "  4. Start chatting with your AI agent!"
+echo -e "${CYAN}Quick Commands:${NC}"
+echo -e "  ${GREEN}~/.superagent/start.sh${NC}    # Start services"
+echo -e "  ${GREEN}~/.superagent/stop.sh${NC}     # Stop services"
+echo -e "  ${GREEN}nano ~/.superagent/brain/USER.md${NC}  # Edit profile"
+echo ""
+echo -e "${YELLOW}What's Next:${NC}"
+echo -e "  1. Open ${GREEN}http://localhost:20128${NC} for 9Router dashboard"
+echo -e "  2. Connect your preferred AI provider in dashboard"
+echo -e "  3. Start chatting with your AI agent!"
 echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${CYAN}  SUPERAGENT — Built for execution. 🔥${NC}"
