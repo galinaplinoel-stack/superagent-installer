@@ -16,7 +16,7 @@
 
 SUPERAGENT is an **elite execution agent** that combines:
 
-- 🧠 **OpenClaw/Hermes** — AI agent framework
+- 🧠 **OpenClaw** — AI OpenClaw
 - 🚀 **9Router** — FREE AI gateway with 40+ providers
 - 📝 **SOUL.md** — Comprehensive agent constitution
 - 🎯 **Skill System** — Modular capabilities (m1-m9, x1-x3)
@@ -57,7 +57,7 @@ sudo ./install.sh
 1. **System check** — Verifies Linux and root access
 2. **Install dependencies** — Node.js, npm, curl, git
 3. **Install 9Router** — AI gateway (npm install -g 9router)
-4. **Install agent framework** — OpenClaw/Hermes
+4. **Install OpenClaw** — OpenClaw
 5. **Setup brain** — SOUL.md, skills, memory system
 6. **Configure API** — Asks for API key, base URL, model
 
@@ -72,7 +72,7 @@ sudo ./install.sh
 This will:
 - Start 9Router on port 20128
 - Load your configuration
-- Start the agent framework
+- Start the OpenClaw
 
 ### Access 9Router Dashboard
 

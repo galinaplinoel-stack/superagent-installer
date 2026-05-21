@@ -116,31 +116,37 @@ fi
 echo ""
 
 # ============================================
-# Install OpenClaw/Hermes
+# Install OpenClaw
 # ============================================
-echo -e "${YELLOW}[4/7] Checking agent framework...${NC}"
+echo -e "${YELLOW}[4/7] Installing OpenClaw...${NC}"
 
 # Create installation directory
 INSTALL_DIR="$HOME/.superagent"
 mkdir -p "$INSTALL_DIR"
 
-# Check for existing agent frameworks
+# Check if OpenClaw is already installed
 if command -v openclaw &> /dev/null; then
-    echo -e "${GREEN}✓ OpenClaw found${NC}"
+    echo -e "${GREEN}✓ OpenClaw already installed${NC}"
     AGENT_TYPE="openclaw"
-elif command -v hermes &> /dev/null; then
-    echo -e "${GREEN}✓ Hermes found${NC}"
-    AGENT_TYPE="hermes"
 else
-    echo -e "${YELLOW}Note: No agent framework found. Installing OpenClaw...${NC}"
+    echo -e "${YELLOW}Installing OpenClaw...${NC}"
     npm install -g openclaw 2>/dev/null || {
-        echo -e "${YELLOW}Note: OpenClaw not available via npm, using manual setup${NC}"
-        AGENT_TYPE="manual"
+        echo -e "${RED}Error: OpenClaw installation failed${NC}"
+        echo -e "${YELLOW}Trying alternative installation method...${NC}"
+        # Clone from GitHub
+        git clone https://github.com/openclaw/openclaw.git "$INSTALL_DIR/openclaw" 2>/dev/null || {
+            echo -e "${RED}Error: Could not install OpenClaw${NC}"
+            exit 1
+        }
     }
+    
+    # Verify installation
     if command -v openclaw &> /dev/null; then
+        echo -e "${GREEN}✓ OpenClaw installed successfully${NC}"
         AGENT_TYPE="openclaw"
     else
-        AGENT_TYPE="manual"
+        echo -e "${RED}Error: OpenClaw not found after installation${NC}"
+        exit 1
     fi
 fi
 
@@ -407,15 +413,13 @@ echo "  Base URL: $BASE_URL"
 echo "  Model: $MODEL"
 echo ""
 
-# Start agent (if available)
+# Start agent
 if command -v openclaw &> /dev/null; then
     echo "Starting OpenClaw..."
     openclaw start
-elif command -v hermes &> /dev/null; then
-    echo "Starting Hermes..."
-    hermes gateway start
 else
-    echo "Agent framework ready. Use 'openclaw' or 'hermes' commands."
+    echo "Error: OpenClaw not found!"
+    exit 1
 fi
 
 echo ""
@@ -438,8 +442,8 @@ pkill -f "9router" 2>/dev/null || true
 # Stop agent
 if command -v openclaw &> /dev/null; then
     openclaw stop 2>/dev/null || true
-elif command -v hermes &> /dev/null; then
-    hermes gateway stop 2>/dev/null || true
+else
+    echo "Warning: OpenClaw not found"
 fi
 
 echo "✓ SUPERAGENT stopped."
