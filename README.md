@@ -1,4 +1,4 @@
-# SUPERAGENT Installer
+# Myfurina
 
 <div align="center">
 
@@ -12,9 +12,9 @@
 
 ---
 
-## What is SUPERAGENT?
+## What is Myfurina?
 
-SUPERAGENT is an **elite execution agent** that combines:
+Myfurina is an **elite execution agent** that combines:
 
 - 🧠 **OpenClaw** — AI agent framework
 - 📝 **SOUL.md** — Comprehensive agent constitution
@@ -70,7 +70,7 @@ sudo ./install.sh
 
 ## After Installation
 
-### Start SUPERAGENT
+### Start Myfurina
 
 ```bash
 ~/.superagent/start.sh
@@ -80,7 +80,7 @@ This will:
 - Export API key and base URL
 - Start OpenClaw gateway
 
-### Stop SUPERAGENT
+### Stop Myfurina
 
 ```bash
 ~/.superagent/stop.sh
@@ -299,7 +299,7 @@ MIT License
 
 <div align="center">
 
-**SUPERAGENT — Built for execution. 🔥**
+**Myfurina — Built for execution. 🔥**
 
 [GitHub](https://github.com/galinaplinoel-stack/Myfurina) • [Issues](https://github.com/galinaplinoel-stack/Myfurina/issues)
 

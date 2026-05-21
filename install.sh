@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# SUPERAGENT Installer
+# Myfurina Installer
 # One-click setup for AI Agent + OpenClaw
 # ============================================
 
@@ -29,7 +29,7 @@ EOF
 echo -e "${NC}"
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Welcome to SUPERAGENT Installer!${NC}"
+echo -e "${BLUE}  Welcome to Myfurina Installer!${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -136,9 +136,9 @@ echo -e "${GREEN}✓ Agent framework ready ($AGENT_TYPE)${NC}"
 echo ""
 
 # ============================================
-# Setup SUPERAGENT Brain
+# Setup Myfurina Brain
 # ============================================
-echo -e "${YELLOW}[4/5] Setting up SUPERAGENT brain...${NC}"
+echo -e "${YELLOW}[4/5] Setting up Myfurina brain...${NC}"
 
 # Copy brain files
 BRAIN_DIR="$INSTALL_DIR/brain"
@@ -257,7 +257,7 @@ cat > "$BRAIN_DIR/TOOLS.md" << 'EOF'
 EOF
 echo -e "${GREEN}✓ TOOLS.md created${NC}"
 
-echo -e "${GREEN}✓ SUPERAGENT brain configured${NC}"
+echo -e "${GREEN}✓ Myfurina brain configured${NC}"
 echo ""
 
 # ============================================
@@ -301,9 +301,9 @@ while [ -z "$TELEGRAM_CHAT_ID" ]; do
     read -r TELEGRAM_CHAT_ID
 done
 
-# Create config file for SUPERAGENT
+# Create config file for Myfurina
 cat > "$INSTALL_DIR/config.env" << EOF
-# SUPERAGENT Configuration
+# Myfurina Configuration
 API_KEY=$API_KEY
 BASE_URL=$BASE_URL
 MODEL=$MODEL_NAME
@@ -429,7 +429,7 @@ cat > "$INSTALL_DIR/start.sh" << 'STARTUP'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/config.env"
 
-echo "Starting SUPERAGENT..."
+echo "Starting Myfurina..."
 echo ""
 
 # Export environment variables for OpenClaw
@@ -452,7 +452,7 @@ else
 fi
 
 echo ""
-echo "SUPERAGENT is ready! 🔥"
+echo "Myfurina is ready! 🔥"
 STARTUP
 
 chmod +x "$INSTALL_DIR/start.sh"
@@ -462,7 +462,7 @@ echo -e "${GREEN}✓ Start script created${NC}"
 cat > "$INSTALL_DIR/stop.sh" << 'STOP'
 #!/bin/bash
 
-echo "Stopping SUPERAGENT..."
+echo "Stopping Myfurina..."
 
 # Stop OpenClaw
 if command -v openclaw &> /dev/null; then
@@ -471,7 +471,7 @@ else
     echo "Warning: OpenClaw not found"
 fi
 
-echo "✓ SUPERAGENT stopped."
+echo "✓ Myfurina stopped."
 STOP
 
 chmod +x "$INSTALL_DIR/stop.sh"
@@ -525,5 +525,5 @@ echo -e "  2. Edit ${GREEN}~/.superagent/brain/USER.md${NC} to update your profi
 echo -e "  3. Add skills to ${GREEN}~/.superagent/brain/skills/${NC}"
 echo ""
 echo -e "${BLUE}========================================${NC}"
-echo -e "${CYAN}  SUPERAGENT — Built for execution. 🔥${NC}"
+echo -e "${CYAN}  Myfurina — Built for execution. 🔥${NC}"
 echo -e "${BLUE}========================================${NC}"
