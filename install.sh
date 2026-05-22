@@ -238,9 +238,9 @@ echo -e -n "${CYAN}  Enter your username: ${NC}"
 read -r USER_USERNAME
 USER_USERNAME=${USER_USERNAME:-"user"}
 
-echo -e -n "${CYAN}  Enter preferred language (default: Bahasa Indonesia): ${NC}"
+echo -e -n "${CYAN}  Enter preferred language (default: English): ${NC}"
 read -r USER_LANG
-USER_LANG=${USER_LANG:-"Bahasa Indonesia"}
+USER_LANG=${USER_LANG:-"English"}
 
 echo -e -n "${CYAN}  Communication style (default: direct and casual): ${NC}"
 read -r USER_STYLE
