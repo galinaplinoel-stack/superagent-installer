@@ -1,10 +1,10 @@
 #!/bin/bash
-set -e
-
 # ============================================
 # Myfurina — One-click AI Agent Installer
 # Supports: Hermes Agent & OpenClaw
 # ============================================
+
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -20,6 +20,16 @@ BRAIN_DIR="$INSTALL_DIR/brain"
 SKILLS_DIR="$BRAIN_DIR/skills"
 MEMORY_DIR="$BRAIN_DIR/memory"
 
+# [FIX #8] Explicit error handler
+error_exit() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    exit 1
+}
+
+warn() {
+    echo -e "${YELLOW}  Warning: $1${NC}" >&2
+}
+
 # ============================================
 # Banner
 # ============================================
@@ -29,7 +39,7 @@ echo "  ████╗ ████║╚██╗ ██╔╝██╔══�
 echo "  ██╔████╔██║ ╚████╔╝ █████╗  ██║   ██║██████╔╝██║██╔██╗ ██║███████║"
 echo "  ██║╚██╔╝██║  ╚██╔╝  ██╔══╝  ██║   ██║██╔══██╗██║██║╚██╗██║██╔══██║"
 echo "  ██║ ╚═╝ ██║   ██║   ██║     ╚██████╔╝██║  ██║██║██║ ╚████║██║  ██║"
-echo "  ╚═╝     ╚═╝   ╚═╝   ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═╝  ╚═╝"
+echo "  ╚═╝     ╚═╝   ╚═╝   ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝"
 echo -e "${NC}"
 echo -e "${CYAN}  One-click installer for AI Agent + Brain System${NC}"
 echo ""
@@ -40,16 +50,45 @@ echo ""
 echo -e "${YELLOW}[1/8] System check...${NC}"
 
 if [[ "$(uname)" != "Linux" ]]; then
-    echo -e "${RED}Error: This installer only supports Linux.${NC}"
-    exit 1
+    error_exit "This installer only supports Linux."
 fi
 
 if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}Error: Please run as root (sudo ./install.sh)${NC}"
-    exit 1
+    error_exit "Please run as root (sudo ./install.sh)"
 fi
 
-echo -e "${GREEN}  ✓ Linux detected${NC}"
+# [FIX #5] Detect distro — only support Debian/Ubuntu with clear error
+DISTRO_ID=""
+if [[ -f /etc/os-release ]]; then
+    DISTRO_ID=$(. /etc/os-release && echo "$ID")
+fi
+
+case "$DISTRO_ID" in
+    ubuntu|debian|linuxmint|pop)
+        PKG_MANAGER="apt-get"
+        echo -e "${GREEN}  ✓ Linux detected ($DISTRO_ID)${NC}"
+        ;;
+    centos|rhel|fedora|rocky|almalinux)
+        PKG_MANAGER="yum"
+        echo -e "${GREEN}  ✓ Linux detected ($DISTRO_ID)${NC}"
+        ;;
+    arch|manjaro)
+        PKG_MANAGER="pacman"
+        echo -e "${GREEN}  ✓ Linux detected ($DISTRO_ID)${NC}"
+        ;;
+    *)
+        if command -v apt-get &>/dev/null; then
+            PKG_MANAGER="apt-get"
+            echo -e "${GREEN}  ✓ Linux detected (unknown distro, using apt-get)${NC}"
+        elif command -v yum &>/dev/null; then
+            PKG_MANAGER="yum"
+            echo -e "${GREEN}  ✓ Linux detected (unknown distro, using yum)${NC}"
+        else
+            error_exit "Unsupported distro: $DISTRO_ID. Requires apt-get or yum."
+        fi
+        ;;
+esac
+
 echo -e "${GREEN}  ✓ Running as root${NC}"
 echo ""
 
@@ -89,9 +128,24 @@ echo ""
 # ============================================
 echo -e "${YELLOW}[3/8] Installing dependencies...${NC}"
 
+install_packages() {
+    case "$PKG_MANAGER" in
+        apt-get)
+            apt-get update -qq || warn "apt-get update failed"
+            apt-get install -y -qq "$@" 2>&1 || error_exit "Failed to install: $*"
+            ;;
+        yum)
+            yum install -y -q "$@" 2>&1 || error_exit "Failed to install: $*"
+            ;;
+        pacman)
+            pacman -S --noconfirm --needed "$@" 2>&1 || error_exit "Failed to install: $*"
+            ;;
+    esac
+}
+
 PACKAGES_TO_INSTALL=""
 for pkg in curl wget git python3; do
-    if ! command -v $pkg &> /dev/null; then
+    if ! command -v "$pkg" &> /dev/null; then
         PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL $pkg"
     else
         echo -e "${GREEN}  ✓ $pkg already installed${NC}"
@@ -99,25 +153,57 @@ for pkg in curl wget git python3; do
 done
 
 if [[ -n "$PACKAGES_TO_INSTALL" ]]; then
-    apt-get update -qq
-    apt-get install -y -qq $PACKAGES_TO_INSTALL > /dev/null 2>&1
+    echo -e "${CYAN}  Installing:$PACKAGES_TO_INSTALL${NC}"
+    install_packages $PACKAGES_TO_INSTALL
     echo -e "${GREEN}  ✓ Installed:$PACKAGES_TO_INSTALL${NC}"
+fi
+
+# [FIX #3] Install pyyaml for Python YAML config
+echo -e "${CYAN}  Checking Python packages...${NC}"
+if ! python3 -c "import yaml" 2>/dev/null; then
+    echo -e "${CYAN}  Installing pyyaml...${NC}"
+    pip3 install pyyaml 2>&1 || {
+        # Fallback: try with --break-system-packages for newer Python
+        pip3 install --break-system-packages pyyaml 2>&1 || warn "pyyaml install failed — YAML config may not work"
+    }
+    if python3 -c "import yaml" 2>/dev/null; then
+        echo -e "${GREEN}  ✓ pyyaml installed${NC}"
+    fi
+else
+    echo -e "${GREEN}  ✓ pyyaml already installed${NC}"
 fi
 
 # Node.js
 if ! command -v node &> /dev/null; then
     echo -e "${CYAN}  Installing Node.js...${NC}"
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
-    apt-get install -y -qq nodejs > /dev/null 2>&1
-    echo -e "${GREEN}  ✓ Node.js installed${NC}"
+    # [FIX #6] Don't suppress errors — check exit code
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || error_exit "Failed to setup Node.js repository"
+        apt-get install -y -qq nodejs || error_exit "Failed to install Node.js"
+    elif [[ "$PKG_MANAGER" == "yum" ]]; then
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || error_exit "Failed to setup Node.js repository"
+        yum install -y -q nodejs || error_exit "Failed to install Node.js"
+    else
+        error_exit "Please install Node.js manually: https://nodejs.org"
+    fi
+    if command -v node &> /dev/null; then
+        echo -e "${GREEN}  ✓ Node.js installed ($(node --version))${NC}"
+    else
+        error_exit "Node.js installation failed"
+    fi
 else
-    echo -e "${GREEN}  ✓ Node.js already installed${NC}"
+    echo -e "${GREEN}  ✓ Node.js already installed ($(node --version))${NC}"
 fi
 
 if ! command -v npm &> /dev/null; then
     echo -e "${CYAN}  Installing npm...${NC}"
-    apt-get install -y -qq npm > /dev/null 2>&1
-    echo -e "${GREEN}  ✓ npm installed${NC}"
+    case "$PKG_MANAGER" in
+        apt-get) apt-get install -y -qq npm 2>&1 || warn "npm install failed" ;;
+        yum) yum install -y -q npm 2>&1 || warn "npm install failed" ;;
+    esac
+    if command -v npm &> /dev/null; then
+        echo -e "${GREEN}  ✓ npm installed${NC}"
+    fi
 else
     echo -e "${GREEN}  ✓ npm already installed${NC}"
 fi
@@ -133,33 +219,35 @@ if [[ "$AGENT_CHOICE" == "1" ]]; then
         echo -e "${GREEN}  ✓ Hermes already installed${NC}"
     else
         echo -e "${CYAN}  Installing Hermes Agent...${NC}"
-        curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-        if command -v hermes &> /dev/null; then
-            echo -e "${GREEN}  ✓ Hermes installed successfully${NC}"
-        else
-            echo -e "${RED}  ✗ Hermes installation failed${NC}"
-            echo -e "${YELLOW}  Try manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash${NC}"
-            exit 1
+        curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash || error_exit "Hermes installation failed"
+        if ! command -v hermes &> /dev/null; then
+            error_exit "Hermes installation failed. Try manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
         fi
+        echo -e "${GREEN}  ✓ Hermes installed successfully${NC}"
     fi
 else
     if command -v openclaw &> /dev/null; then
         echo -e "${GREEN}  ✓ OpenClaw already installed${NC}"
     else
         echo -e "${CYAN}  Installing OpenClaw via npm...${NC}"
-        npm install -g openclaw 2>/dev/null || {
-            echo -e "${YELLOW}  npm install failed, trying from source...${NC}"
-            cd /tmp
-            git clone https://github.com/openclaw/openclaw.git 2>/dev/null || true
-            cd openclaw && npm install && npm link
-            cd /tmp && rm -rf openclaw
-        }
-        if command -v openclaw &> /dev/null; then
-            echo -e "${GREEN}  ✓ OpenClaw installed successfully${NC}"
+        if npm install -g openclaw 2>&1; then
+            echo -e "${GREEN}  ✓ OpenClaw installed via npm${NC}"
         else
-            echo -e "${RED}  ✗ OpenClaw installation failed${NC}"
-            echo -e "${YELLOW}  Try manually: npm install -g openclaw${NC}"
-            exit 1
+            # [FIX #4] Robust fallback — verify clone before building
+            echo -e "${YELLOW}  npm install failed, trying from source...${NC}"
+            CLONE_DIR=$(mktemp -d /tmp/openclaw-XXXXXX)
+            if git clone https://github.com/openclaw/openclaw.git "$CLONE_DIR" 2>&1; then
+                cd "$CLONE_DIR" && npm install && npm link
+                cd /tmp && rm -rf "$CLONE_DIR"
+                echo -e "${GREEN}  ✓ OpenClaw installed from source${NC}"
+            else
+                rm -rf "$CLONE_DIR"
+                error_exit "OpenClaw installation failed. Try manually: npm install -g openclaw"
+            fi
+        fi
+
+        if ! command -v openclaw &> /dev/null; then
+            error_exit "OpenClaw not found after installation. Try manually: npm install -g openclaw"
         fi
     fi
 fi
@@ -192,7 +280,8 @@ while [[ -z "$MODEL_NAME" ]]; do
 done
 
 echo ""
-echo -e "${GREEN}  ✓ API Key: ${API_KEY:0:5}...${NC}"
+# [FIX #7] Only show first 4 chars of credential
+echo -e "${GREEN}  ✓ API Key: ${API_KEY:0:4}****${NC}"
 echo -e "${GREEN}  ✓ Base URL: $BASE_URL${NC}"
 echo -e "${GREEN}  ✓ Model: $MODEL_NAME${NC}"
 echo ""
@@ -211,16 +300,24 @@ while [[ -z "$TELEGRAM_BOT_TOKEN" ]]; do
     read -r TELEGRAM_BOT_TOKEN
 done
 
+# [FIX #10] Validate Telegram Chat ID format (numeric, optional leading -)
 echo -e -n "${CYAN}  Enter your Telegram Chat ID (required): ${NC}"
 read -r TELEGRAM_CHAT_ID
-while [[ -z "$TELEGRAM_CHAT_ID" ]]; do
-    echo -e "${RED}  Telegram Chat ID is required!${NC}"
+while true; do
+    if [[ -z "$TELEGRAM_CHAT_ID" ]]; then
+        echo -e "${RED}  Telegram Chat ID is required!${NC}"
+    elif [[ ! "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
+        echo -e "${RED}  Invalid Chat ID! Must be numeric (e.g., 123456789 or -1001234567890)${NC}"
+    else
+        break
+    fi
     echo -e -n "${CYAN}  Enter your Telegram Chat ID: ${NC}"
     read -r TELEGRAM_CHAT_ID
 done
 
 echo ""
-echo -e "${GREEN}  ✓ Bot Token: ${TELEGRAM_BOT_TOKEN:0:5}...${NC}"
+# [FIX #7] Only show first 4 chars
+echo -e "${GREEN}  ✓ Bot Token: ${TELEGRAM_BOT_TOKEN:0:4}****${NC}"
 echo -e "${GREEN}  ✓ Chat ID: $TELEGRAM_CHAT_ID${NC}"
 echo ""
 
@@ -331,11 +428,11 @@ if [[ "$AGENT_CHOICE" == "1" ]]; then
     echo -e "${CYAN}  Configuring Hermes Agent...${NC}"
 
     # Step 1: Set custom provider
-    hermes config set custom_providers.myfurina.name "Myfurina Provider" 2>&1 || echo -e "${YELLOW}  Warning: provider name${NC}"
-    hermes config set custom_providers.myfurina.base_url "$BASE_URL" 2>&1 || echo -e "${YELLOW}  Warning: base_url${NC}"
-    hermes config set custom_providers.myfurina.api_key "$API_KEY" 2>&1 || echo -e "${YELLOW}  Warning: api_key${NC}"
-    hermes config set custom_providers.myfurina.model "$MODEL_NAME" 2>&1 || echo -e "${YELLOW}  Warning: model${NC}"
-    hermes config set main_provider "custom:myfurina" 2>&1 || echo -e "${YELLOW}  Warning: main_provider${NC}"
+    hermes config set custom_providers.myfurina.name "Myfurina Provider" 2>&1 || warn "provider name"
+    hermes config set custom_providers.myfurina.base_url "$BASE_URL" 2>&1 || warn "base_url"
+    hermes config set custom_providers.myfurina.api_key "$API_KEY" 2>&1 || warn "api_key"
+    hermes config set custom_providers.myfurina.model "$MODEL_NAME" 2>&1 || warn "model"
+    hermes config set main_provider "custom:myfurina" 2>&1 || warn "main_provider"
     echo -e "${GREEN}  ✓ Custom provider configured${NC}"
 
     # Step 2: Create .env file
@@ -354,7 +451,8 @@ EOF
     chmod 600 "$HERMES_ENV"
     echo -e "${GREEN}  ✓ Environment variables set${NC}"
 
-    # Step 3: Configure Telegram (CORRECT: top-level telegram: section)
+    # Step 3: Configure Telegram
+    # [FIX #2] allowed_chats is a list, [FIX #3] pyyaml already installed
     python3 << PYEOF
 import yaml
 import os
@@ -367,7 +465,8 @@ if os.path.exists(config_path):
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f) or {}
-    except:
+    except Exception as e:
+        print(f"Warning: Could not parse config.yaml: {e}")
         config = {}
 
 # Set TOP-LEVEL telegram section (not channels.telegram!)
@@ -392,8 +491,7 @@ PYEOF
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}  ✓ Telegram configured (top-level telegram: section)${NC}"
     else
-        echo -e "${RED}  ✗ Python YAML config failed${NC}"
-        echo -e "${YELLOW}  Manual fix: hermes config edit${NC}"
+        warn "Python YAML config failed — run: hermes config edit"
     fi
 
     # Step 4: Restrict permissions
@@ -404,12 +502,12 @@ PYEOF
     if grep -q "custom:myfurina" "$HOME/.hermes/config.yaml" 2>/dev/null; then
         echo -e "${GREEN}  ✓ Custom provider verified${NC}"
     else
-        echo -e "${YELLOW}  ⚠ Custom provider not in config${NC}"
+        warn "Custom provider not in config"
     fi
     if grep -q "bot_token" "$HOME/.hermes/config.yaml" 2>/dev/null; then
         echo -e "${GREEN}  ✓ Telegram config verified${NC}"
     else
-        echo -e "${YELLOW}  ⚠ Telegram config not in config${NC}"
+        warn "Telegram config not in config"
     fi
 
 else
@@ -468,7 +566,7 @@ EOF
   "commands": { "ownerAllowFrom": "telegram:$TELEGRAM_CHAT_ID" }
 }
 EOF
-    openclaw config patch --file "$OPENCLAW_PATCH" 2>&1 || echo -e "${YELLOW}  Patch warnings (config file already created)${NC}"
+    openclaw config patch --file "$OPENCLAW_PATCH" 2>&1 || warn "Patch warnings (config file already created)"
     shred -u "$OPENCLAW_PATCH" 2>/dev/null || rm -f "$OPENCLAW_PATCH"
 
     # Save .env
@@ -484,6 +582,7 @@ fi
 
 # ============================================
 # Start/Stop Scripts
+# [FIX #1] Heredoc: header is quoted (static), body is unquoted (vars expand)
 # ============================================
 cat > "$INSTALL_DIR/start.sh" << 'STARTEOF'
 #!/bin/bash
@@ -499,19 +598,20 @@ echo -e "${GREEN}Agent: $AGENT_FRAMEWORK${NC}"
 echo -e "${GREEN}Model: $MODEL${NC}"
 STARTEOF
 
+# [FIX #1] Unquoted heredoc — $API_KEY and $BASE_URL expand at install time
 if [[ "$AGENT_CHOICE" == "1" ]]; then
     cat >> "$INSTALL_DIR/start.sh" << STARTEOF
 export OPENAI_API_KEY="$API_KEY"
 export OPENAI_BASE_URL="$BASE_URL"
 if ! command -v hermes &> /dev/null; then
-    echo -e "\${RED}Error: hermes not found\${NC}"; exit 1
+    echo -e "\033[0;31mError: hermes not found\033[0m"; exit 1
 fi
 if [[ ! -f "\$HOME/.hermes/config.yaml" ]]; then
-    echo -e "\${RED}Error: config.yaml not found\${NC}"; exit 1
+    echo -e "\033[0;31mError: config.yaml not found\033[0m"; exit 1
 fi
-echo -e "\${CYAN}Starting Hermes gateway...\${NC}"
+echo -e "\033[0;36mStarting Hermes gateway...\033[0m"
 hermes gateway start
-echo -e "\${GREEN}✓ Myfurina is running!\${NC}"
+echo -e "\033[0;32m✓ Myfurina is running!\033[0m"
 echo -e "  Chat: Telegram | Stop: ~/.superagent/stop.sh"
 STARTEOF
 else
@@ -521,11 +621,11 @@ export OPENAI_BASE_URL="$BASE_URL"
 export TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 export TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID"
 if ! command -v openclaw &> /dev/null; then
-    echo -e "\${RED}Error: openclaw not found\${NC}"; exit 1
+    echo -e "\033[0;31mError: openclaw not found\033[0m"; exit 1
 fi
-echo -e "\${CYAN}Starting OpenClaw gateway...\${NC}"
+echo -e "\033[0;36mStarting OpenClaw gateway...\033[0m"
 openclaw gateway start
-echo -e "\${GREEN}✓ Myfurina is running!\${NC}"
+echo -e "\033[0;32m✓ Myfurina is running!\033[0m"
 echo -e "  Chat: Telegram | Stop: ~/.superagent/stop.sh"
 STARTEOF
 fi
