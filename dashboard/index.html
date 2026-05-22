@@ -280,41 +280,56 @@
             }
         }
 
+        // [FIX #7] Escape HTML to prevent XSS
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function createAgentCard(agent) {
             const statusClass = agent.status === 'running' ? 'status-running' :
                                agent.status === 'stopped' ? 'status-stopped' : 'status-unknown';
 
+            const safeName = escapeHtml(agent.name);
+            const safeStatus = escapeHtml(agent.status || 'unknown');
+            const safeModel = escapeHtml(agent.model || 'N/A');
+            const safeChat = escapeHtml(agent.telegram_chat || 'N/A');
+            const safeProfile = escapeHtml(agent.profile || 'default');
+            const safeDate = agent.created ? escapeHtml(new Date(agent.created).toLocaleDateString()) : 'N/A';
+
             return `
                 <div class="agent-card">
                     <div class="agent-header">
-                        <div class="agent-name">${agent.name}</div>
+                        <div class="agent-name">${safeName}</div>
                         <div class="status-badge ${statusClass}">
                             <div class="status-dot"></div>
-                            ${agent.status || 'unknown'}
+                            ${safeStatus}
                         </div>
                     </div>
                     <div class="agent-details">
                         <div class="detail-row">
                             <span class="detail-label">Model</span>
-                            <span class="detail-value">${agent.model || 'N/A'}</span>
+                            <span class="detail-value">${safeModel}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Chat ID</span>
-                            <span class="detail-value">${agent.telegram_chat || 'N/A'}</span>
+                            <span class="detail-value">${safeChat}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Profile</span>
-                            <span class="detail-value">${agent.profile || 'default'}</span>
+                            <span class="detail-value">${safeProfile}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Created</span>
-                            <span class="detail-value">${agent.created ? new Date(agent.created).toLocaleDateString() : 'N/A'}</span>
+                            <span class="detail-value">${safeDate}</span>
                         </div>
                     </div>
                     <div class="agent-actions">
-                        <button class="btn btn-start" onclick="agentAction('start', '${agent.name}')">Start</button>
-                        <button class="btn btn-stop" onclick="agentAction('stop', '${agent.name}')">Stop</button>
-                        <button class="btn btn-logs" onclick="agentAction('logs', '${agent.name}')">Logs</button>
+                        <button class="btn btn-start" onclick="agentAction('start', '${safeName}')">Start</button>
+                        <button class="btn btn-stop" onclick="agentAction('stop', '${safeName}')">Stop</button>
+                        <button class="btn btn-logs" onclick="agentAction('logs', '${safeName}')">Logs</button>
                     </div>
                 </div>
             `;

@@ -30,6 +30,20 @@ ensure_files() {
     fi
 }
 
+# [FIX #2] Validate agent name — only allow [a-zA-Z0-9_-]
+validate_name() {
+    local name="$1"
+    if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo -e "${RED}Error: Invalid agent name '$name'${NC}"
+        echo -e "${YELLOW}  Only letters, numbers, hyphens, and underscores allowed.${NC}"
+        return 1
+    fi
+    if [[ ${#name} -gt 64 ]]; then
+        echo -e "${RED}Error: Agent name too long (max 64 chars)${NC}"
+        return 1
+    fi
+}
+
 get_agents() {
     python3 -c "
 import json, sys
@@ -40,73 +54,73 @@ for a in data.get('agents', []):
 " 2>/dev/null || echo ""
 }
 
+# [FIX #2] Use sys.argv instead of string interpolation
 agent_exists() {
+    local name="$1"
     python3 -c "
-import json
-with open('$AGENTS_FILE') as f:
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
 names = [a['name'] for a in data.get('agents', [])]
-print('yes' if '$1' in names else 'no')
-" 2>/dev/null || echo "no"
+print('yes' if sys.argv[2] in names else 'no')
+" "$AGENTS_FILE" "$name" 2>/dev/null || echo "no"
 }
 
+# [FIX #2] Use environment variables + sys.argv instead of string interpolation
 add_agent() {
     local name="$1"
     local profile="$2"
     local model="$3"
     local telegram_chat="$4"
 
-    python3 << PYEOF
-import json
+    AGENT_NAME="$name" AGENT_PROFILE="$profile" AGENT_MODEL="$model" AGENT_CHAT="$telegram_chat" python3 << 'PYEOF'
+import json, os
 
-with open('$AGENTS_FILE') as f:
+agents_file = os.environ.get("AGENTS_FILE_PATH", os.path.expanduser("~/.superagent/agents.json"))
+with open(agents_file) as f:
     data = json.load(f)
 
 data['agents'].append({
-    'name': '$name',
-    'profile': '$profile',
-    'model': '$model',
-    'telegram_chat': '$telegram_chat',
+    'name': os.environ['AGENT_NAME'],
+    'profile': os.environ['AGENT_PROFILE'],
+    'model': os.environ['AGENT_MODEL'],
+    'telegram_chat': os.environ['AGENT_CHAT'],
     'status': 'stopped',
-    'created': '$(date -Iseconds)'
+    'created': os.popen("date -Iseconds").read().strip()
 })
 
-with open('$AGENTS_FILE', 'w') as f:
+with open(agents_file, 'w') as f:
     json.dump(data, f, indent=2)
 PYEOF
 }
 
+# [FIX #2] Use sys.argv
 remove_agent() {
     local name="$1"
-    python3 << PYEOF
-import json
-
-with open('$AGENTS_FILE') as f:
+    python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
-
-data['agents'] = [a for a in data['agents'] if a['name'] != '$name']
-
-with open('$AGENTS_FILE', 'w') as f:
+data['agents'] = [a for a in data['agents'] if a['name'] != sys.argv[2]]
+with open(sys.argv[1], 'w') as f:
     json.dump(data, f, indent=2)
-PYEOF
+" "$AGENTS_FILE" "$name"
 }
 
+# [FIX #2] Use sys.argv
 update_agent_status() {
     local name="$1"
     local status="$2"
-    python3 << PYEOF
-import json
-
-with open('$AGENTS_FILE') as f:
+    python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
-
 for a in data['agents']:
-    if a['name'] == '$name':
-        a['status'] = '$status'
-
-with open('$AGENTS_FILE', 'w') as f:
+    if a['name'] == sys.argv[2]:
+        a['status'] = sys.argv[3]
+with open(sys.argv[1], 'w') as f:
     json.dump(data, f, indent=2)
-PYEOF
+" "$AGENTS_FILE" "$name" "$status"
 }
 
 # ============================================
@@ -139,6 +153,9 @@ cmd_create() {
         echo -e "  Usage: myfurina create <name>"
         return 1
     fi
+
+    # [FIX #2] Validate name
+    validate_name "$name" || return 1
 
     if [[ "$(agent_exists "$name")" == "yes" ]]; then
         echo -e "${RED}Error: Agent '$name' already exists${NC}"
@@ -196,11 +213,11 @@ cmd_create() {
     hermes -p "$name" config set custom_providers.myfurina.model "$model" 2>&1 || true
     hermes -p "$name" config set main_provider "custom:myfurina" 2>&1 || true
 
-    # Set Telegram config via Python
-    python3 << PYEOF
+    # [FIX #3] Use environment variables + list for allowed_chats
+    CHAT_ID="$chat_id" BOT_TOKEN="$bot_token" PROFILE_NAME="$name" python3 << 'PYEOF'
 import yaml, os
 
-config_path = os.path.expanduser("~/.hermes/profiles/$name/config.yaml")
+config_path = os.path.expanduser(f"~/.hermes/profiles/{os.environ['PROFILE_NAME']}/config.yaml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 
 config = {}
@@ -212,8 +229,8 @@ if os.path.exists(config_path):
         config = {}
 
 config['telegram'] = {
-    'allowed_chats': '$chat_id',
-    'bot_token': '$bot_token',
+    'allowed_chats': [os.environ['CHAT_ID']],  # FIX: list, not string
+    'bot_token': os.environ['BOT_TOKEN'],
     'enabled': True,
     'channel_prompts': {},
     'reactions': False
@@ -250,6 +267,8 @@ cmd_start() {
         return 1
     fi
 
+    validate_name "$name" || return 1
+
     if [[ "$(agent_exists "$name")" != "yes" ]]; then
         echo -e "${RED}Error: Agent '$name' not found${NC}"
         return 1
@@ -265,10 +284,18 @@ cmd_start() {
     echo -e "${GREEN}  ✓ Agent '$name' started${NC}"
 }
 
+# [FIX #6] Validate agent exists before stopping
 cmd_stop() {
     local name="$1"
     if [[ -z "$name" ]]; then
         echo -e "${RED}Error: Agent name required${NC}"
+        return 1
+    fi
+
+    validate_name "$name" || return 1
+
+    if [[ "$(agent_exists "$name")" != "yes" ]]; then
+        echo -e "${RED}Error: Agent '$name' not found${NC}"
         return 1
     fi
 
@@ -285,6 +312,8 @@ cmd_restart() {
         return 1
     fi
 
+    validate_name "$name" || return 1
+
     cmd_stop "$name"
     sleep 2
     cmd_start "$name"
@@ -294,6 +323,8 @@ cmd_status() {
     local name="$1"
 
     if [[ -n "$name" ]]; then
+        validate_name "$name" || return 1
+
         # Show specific agent status
         if [[ "$(agent_exists "$name")" != "yes" ]]; then
             echo -e "${RED}Error: Agent '$name' not found${NC}"
@@ -343,6 +374,8 @@ cmd_delete() {
         return 1
     fi
 
+    validate_name "$name" || return 1
+
     if [[ "$(agent_exists "$name")" != "yes" ]]; then
         echo -e "${RED}Error: Agent '$name' not found${NC}"
         return 1
@@ -368,6 +401,8 @@ cmd_logs() {
         return 1
     fi
 
+    validate_name "$name" || return 1
+
     local log_file="$HERMES_HOME/profiles/$name/logs/gateway.log"
     if [[ -f "$log_file" ]]; then
         tail -50 "$log_file"
@@ -381,6 +416,12 @@ cmd_logs() {
 # ============================================
 
 generate_dashboard() {
+    # [FIX #1] Copy dashboard index.html to serve directory
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$script_dir/dashboard/index.html" ]]; then
+        cp "$script_dir/dashboard/index.html" "$DASHBOARD_DIR/index.html" 2>/dev/null || true
+    fi
+
     # Generate status JSON for dashboard
     python3 << 'PYEOF'
 import json, os, subprocess, datetime
@@ -426,14 +467,21 @@ PYEOF
 cmd_dashboard() {
     echo -e "${CYAN}Starting Myfurina Dashboard...${NC}"
 
+    # [FIX #1] Copy dashboard files first
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$script_dir/dashboard/index.html" ]]; then
+        cp "$script_dir/dashboard/index.html" "$DASHBOARD_DIR/index.html"
+        echo -e "${GREEN}  ✓ Dashboard files copied${NC}"
+    fi
+
     # Generate initial status
     generate_dashboard
 
     # Start simple HTTP server
     cd "$DASHBOARD_DIR"
 
-    # Check if port 8080 is available
-    if lsof -i :8080 &>/dev/null; then
+    # [FIX #8] Use ss instead of lsof
+    if ss -tlnp 2>/dev/null | grep -q ":8080 " || netstat -tlnp 2>/dev/null | grep -q ":8080 "; then
         echo -e "${YELLOW}Port 8080 in use, trying 8081...${NC}"
         PORT=8081
     else
@@ -444,15 +492,23 @@ cmd_dashboard() {
     echo -e "  Press Ctrl+C to stop"
     echo ""
 
+    # [FIX #5] Track background PID and add trap
     # Create a simple update loop
-    while true; do
-        generate_dashboard > /dev/null 2>&1
-        sleep 10
-    done &
+    (
+        while true; do
+            generate_dashboard > /dev/null 2>&1
+            sleep 10
+        done
+    ) &
+    BG_PID=$!
+
+    # Trap to kill background process on exit
+    trap "kill $BG_PID 2>/dev/null; echo -e '\n${GREEN}  ✓ Dashboard stopped${NC}'; exit 0" INT TERM EXIT
 
     # Start HTTP server
     python3 -m http.server $PORT 2>/dev/null || {
         echo -e "${RED}Failed to start HTTP server${NC}"
+        kill $BG_PID 2>/dev/null
         return 1
     }
 }
